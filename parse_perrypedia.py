@@ -40,7 +40,7 @@ def print_xml(element: etree.Element) -> None:
 
 
 def extract_author(author_cell: etree.Element) -> str:
-    return author_cell.find('a').text
+    return author_cell.find('a').text.replace('\xa0', ' ')
 
 
 def strip_tags(html: str) -> str:
