@@ -10,7 +10,7 @@ from html.parser import HTMLParser
 from sys import argv
 from datetime import date
 from glob import glob
-from typing import List, Dict
+from typing import List, Dict, Union
 
 __author__ = 'Lene Preuss <lene.preuss@gmail.com>'
 
@@ -28,7 +28,7 @@ def epub_for_novel(novel_number: int) -> str:
         hundreds=(int(novel_number / 100)), first="00" if novel_number > 99 else "01"
     )
     files = glob("{}/{}/{:04d}*.epub".format(EPUB_BASE_DIR, subdir, novel_number))
-    return files[0]
+    return files[0] if files else None
 
 
 def url_for_novel(novel_number: int) -> str:
@@ -91,7 +91,9 @@ class PerryRhodanPage:
                 novel = cls(number)
             cls.pages.append(cls(number))
             print(number, novel.title, ' ' * 40, end='\r')
-        cls.save(cls.pages)
+            if novel.synopsis:
+                print(novel.synopsis)
+            cls.save(cls.pages)
 
     @classmethod
     def slice(cls, start: int, end: int) -> List:
@@ -168,17 +170,22 @@ class PerryRhodanPage:
                     return strip_tags(str(etree.tostring(element), 'utf-8')).strip()
 
     @staticmethod
-    def _read_synopsis_from_epub(book_number: int) -> str:
+    def _read_synopsis_from_epub(book_number: int) -> Union[str, None]:
         from ebooklib import epub
-        book = epub.read_epub(epub_for_novel(book_number))
-        for item in book.get_items():
-            if isinstance(item, epub.EpubHtml):
-                elements = html.fromstring(item.content).xpath(
-                    'x:body/x:p[@class="P-P2"]',
-                    namespaces={'x': 'http://www.w3.org/1999/xhtml'}
-                )
-                for e in elements:
-                    print(etree.tostring(e).decode('utf-8'))
+        epub_file = epub_for_novel(book_number)
+        if epub_file is None:
+            return None
+        try:
+            book = epub.read_epub(epub_file)
+        except KeyError:
+            return None
+
+        for item in [i for i in book.get_items() if isinstance(i, epub.EpubHtml)]:
+            elements = html.fromstring(item.content).xpath('body/p[@class="P-P2"]')
+            elements = [e.text for e in elements if e.text is not None and len(e.text) > 10]
+            if 1 <= len(elements) <= 20:
+                return '\n'.join(elements)
+
         return None
 
 
@@ -205,7 +212,7 @@ def run(opts: Namespace):
         for page in pages:
             print(str(page))
     else:
-        print(len([page for page in pages if page.synopsis is not None]), 'with synopsis')
+        print(len([page for page in pages if page.synopsis is not None]), 'with synopsis', ' ' * 40)
 
         authors = count_authors(pages)
         pprint(sorted([(a[0], a[1]) for a in authors.items()], key=lambda pair: pair[1], reverse=True))
