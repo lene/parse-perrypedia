@@ -85,14 +85,11 @@ class PerryRhodanPage:
     def generate(cls, start: int, end: int) -> None:
         cls.pages = cls.load()
         for number in range(max(start, len(cls.pages) + 1), end + 1):
-            try:
-                novel = cls(number)
-            except ConnectionError:
-                novel = cls(number)
+            novel = cls(number)
             cls.pages.append(cls(number))
             print(number, novel.title, ' ' * 40, end='\r')
             if novel.synopsis:
-                print(novel.synopsis)
+                print('\n', novel.synopsis)
             cls.save(cls.pages)
 
     @classmethod
