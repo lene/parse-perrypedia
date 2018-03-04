@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from requests import get
-from requests.exceptions import ConnectionError
 from lxml import etree, html
 
 from pprint import pprint
@@ -39,8 +38,8 @@ def print_xml(element: etree.Element) -> None:
     print(str(etree.tostring(element, pretty_print=True), 'utf-8'))
 
 
-def extract_author(author_cell: etree.Element) -> str:
-    return author_cell.find('a').text.replace('\xa0', ' ')
+def extract_linktext(table_cell: etree.Element) -> str:
+    return table_cell.find('a').text.replace('\xa0', ' ')
 
 
 def strip_tags(html: str) -> str:
@@ -64,36 +63,42 @@ def strip_tags(html: str) -> str:
     return s.get_data()
 
 
-class PerryRhodanPage:
+SAVE_FILE_NAME = 'novels.pickle'
 
-    SAVE_FILE_NAME = 'novels.pickle'
+
+class PerryRhodanPage:
 
     pages = []
 
     @classmethod
-    def save(cls, pages: List):
+    def save(cls, pages: List['PerryRhodanPage'], save_file_name: str=SAVE_FILE_NAME) -> None:
         from pickle import dump
-        dump(pages, open(cls.SAVE_FILE_NAME, 'wb'))
+        dump(pages, open(save_file_name, 'wb'))
 
     @classmethod
-    def load(cls) -> List:
+    def load(cls, save_file_name: str=SAVE_FILE_NAME) -> List['PerryRhodanPage']:
         from pickle import load
         from os.path import isfile
-        return load(open(cls.SAVE_FILE_NAME, 'rb')) if isfile(cls.SAVE_FILE_NAME) else []
+        return load(open(save_file_name, 'rb')) if isfile(save_file_name) else []
 
     @classmethod
-    def generate(cls, start: int, end: int) -> None:
+    def generate(cls, start: int, end: int, verbose: bool=True) -> None:
         cls.pages = cls.load()
         for number in range(max(start, len(cls.pages) + 1), end + 1):
             novel = cls(number)
-            cls.pages.append(cls(number))
-            print(number, novel.title, ' ' * 40, end='\r')
-            if novel.synopsis:
-                print('\n', novel.synopsis)
+            cls.pages.append(novel)
             cls.save(cls.pages)
+            cls._print_progress(novel, verbose)
 
     @classmethod
-    def slice(cls, start: int, end: int) -> List:
+    def _print_progress(cls, novel: 'PerryRhodanPage', verbose: bool):
+        if verbose:
+            print(novel.number, novel.title, ' ' * 40, end='\r')
+            if novel.synopsis:
+                print('\n', novel.synopsis)
+
+    @classmethod
+    def slice(cls, start: int, end: int) -> List['PerryRhodanPage']:
         if not cls.pages:
             cls.generate(1, end)
         return cls.pages[start - 1:end]
@@ -101,6 +106,7 @@ class PerryRhodanPage:
     def __init__(self, novel_number: int):
         self.author = None
         self.publish_date = None
+        self.cycle = None
         self.number = novel_number
         html_page = get(url_for_novel(novel_number))
         content = etree.fromstring(html_page.text.encode('utf-8')).find('body/div[@id="content"]')
@@ -110,9 +116,10 @@ class PerryRhodanPage:
         self._extract_overview_data(body_content)
         self.synopsis = self._read_synopsis(body_content) or self._read_synopsis_from_epub(self.number)
 
-    def __str__(self):
-        return 'Title: {} (Perry Rhodan, #{})\nAuthor: {}\nPublished: {}\n'.format(
-            self.title, self.number, self.author, self.publish_date) + \
+    def goodreads_data(self) -> str:
+        return '''Title: Perry Rhodan {0.number}: {0.title} (Heftroman): Perry Rhodan-Zyklus "{0.cycle}"
+Author: {0.author}
+Published: {0.publish_date}\n'''.format(self) + \
             ('Synopsis: {}\n'.format(self.synopsis) if self.synopsis else '') + \
             'Publisher: {}'.format('Pabel-Moewig Verlag KG, Rastatt')
 
@@ -121,7 +128,9 @@ class PerryRhodanPage:
             cells = row.findall('td')
             if cells and cells[0] is not None and cells[0].text is not None:
                 if 'Autor:' in cells[0].text:
-                    self.author = extract_author(cells[1])
+                    self.author = extract_linktext(cells[1])
+                elif 'Zyklus:' in cells[0].text:
+                    self.cycle = extract_linktext(cells[1])
                 elif 'Erstmals' in cells[0].text and 'erschienen' in cells[0].text:
                     self.publish_date = self._extract_date(cells[1])
 
@@ -207,9 +216,9 @@ def run(opts: Namespace):
     pages = PerryRhodanPage.slice(opts.start, opts.end if opts.end else opts.start)
     if opts.goodreads:
         for page in pages:
-            print(str(page))
+            print(page.goodreads_data())
     else:
-        print(len([page for page in pages if page.synopsis is not None]), 'with synopsis', ' ' * 40)
+        print(len([page for page in pages if page.synopsis is not None]), 'with synopsis')
 
         authors = count_authors(pages)
         pprint(sorted([(a[0], a[1]) for a in authors.items()], key=lambda pair: pair[1], reverse=True))
