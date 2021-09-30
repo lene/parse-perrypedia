@@ -1,15 +1,11 @@
-#!/usr/bin/env python3
-from requests import get
-from lxml import etree, html
-
-from pprint import pprint
-from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from html.parser import HTMLParser
-from sys import argv
 from datetime import date
 from glob import glob
 from typing import List, Dict, Union
+
+from requests import get
+from lxml import etree, html
 
 __author__ = 'Lene Preuss <lene.preuss@gmail.com>'
 
@@ -71,18 +67,18 @@ class PerryRhodanPage:
     pages = []
 
     @classmethod
-    def save(cls, pages: List['PerryRhodanPage'], save_file_name: str=SAVE_FILE_NAME) -> None:
+    def save(cls, pages: List['PerryRhodanPage'], save_file_name: str = SAVE_FILE_NAME) -> None:
         from pickle import dump
         dump(pages, open(save_file_name, 'wb'))
 
     @classmethod
-    def load(cls, save_file_name: str=SAVE_FILE_NAME) -> List['PerryRhodanPage']:
+    def load(cls, save_file_name: str = SAVE_FILE_NAME) -> List['PerryRhodanPage']:
         from pickle import load
         from os.path import isfile
         return load(open(save_file_name, 'rb')) if isfile(save_file_name) else []
 
     @classmethod
-    def generate(cls, start: int, end: int, verbose: bool=True) -> None:
+    def generate(cls, start: int, end: int, verbose: bool = True) -> None:
         cls.pages = cls.load()
         for number in range(max(start, len(cls.pages) + 1), end + 1):
             novel = cls(number)
@@ -109,7 +105,7 @@ class PerryRhodanPage:
         self.cycle = None
         self.number = novel_number
         html_page = get(url_for_novel(novel_number))
-        content = etree.fromstring(html_page.text.encode('utf-8')).find('body/div[@id="content"]')
+        content = html.fromstring(html_page.text.encode('utf-8')).find('body/div[@id="content"]')
         self.title = self._read_title(content)
 
         body_content = content.find('div[@id="bodyContent"]')
@@ -143,25 +139,26 @@ Published: {0.publish_date}\n'''.format(self) + \
 
     @staticmethod
     def _extract_date(date_cell: etree.Element) -> date:
-        parts = date_cell.text.strip().split()
+        cell_text = date_cell.text_content()
+        parts = cell_text.strip().split()
         if ',' in parts[0]:
             parts = parts[1:]
         if len(parts) == 3:
             return date(year=int(parts[2]), month=MONTHS.index(parts[1])+1, day=int(parts[0].strip('.')))
         else:
-            parts = date_cell.text.strip().split()
+            parts = cell_text.strip().split()
             if len(parts) == 2:
                 return date(year=int(parts[1]), month=MONTHS.index(parts[0])+1, day=1)
             else:
                 try:
-                    return date(year=int(parts[0]), month=12, day=1)
+                    return date(year=int(parts[0]), month=12, day=31)
                 except ValueError:
                     return None
 
     @staticmethod
     def _overview_table_rows(body_content: etree.Element) -> List[etree.Element]:
-        overview_table = body_content.find('div/div[@class="perrypedia_std_rframe overview"]/table')
-        return overview_table.findall('tr')
+        overview_table = body_content.find('.//div[@class="perrypedia_std_rframe overview"]/table')
+        return overview_table.findall('.//tr')
 
     @staticmethod
     def _read_synopsis(body_content: etree.Element) -> str:
@@ -170,7 +167,7 @@ Published: {0.publish_date}\n'''.format(self) + \
             for element in div.iter():
                 if element.tag == 'h2':
                     span = element.find('span')
-                    if span is not None and 'Kurzzusammenfassung' in span.text:
+                    if span is not None and span.text and 'Kurzzusammenfassung' in span.text:
                         parse_next_p = True
                 elif element.tag == 'p' and parse_next_p:
                     return strip_tags(str(etree.tostring(element), 'utf-8')).strip()
@@ -202,26 +199,3 @@ def count_authors(pages: List[PerryRhodanPage]) -> Dict[str, int]:
     return authors
 
 
-def parse() -> Namespace:
-    parser = ArgumentParser(description="Read Perrypedia and print info about Perry Rhodan issues")
-    parser.add_argument('-s', '--start', default=1, type=int, help='First issue')
-    parser.add_argument('-e', '--end', default=0, type=int, help='Last issue')
-    parser.add_argument(
-        '-g', '--goodreads', action='store_true', help='Print info required by goodreads'
-    )
-    return parser.parse_args(argv[1:])
-
-
-def run(opts: Namespace):
-    pages = PerryRhodanPage.slice(opts.start, opts.end if opts.end else opts.start)
-    if opts.goodreads:
-        for page in pages:
-            print(page.goodreads_data())
-    else:
-        print(len([page for page in pages if page.synopsis is not None]), 'with synopsis')
-
-        authors = count_authors(pages)
-        pprint(sorted([(a[0], a[1]) for a in authors.items()], key=lambda pair: pair[1], reverse=True))
-
-if __name__ == '__main__':
-    run(parse())
