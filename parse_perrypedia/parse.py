@@ -2,7 +2,7 @@ from collections import defaultdict
 from html.parser import HTMLParser
 from datetime import date
 from glob import glob
-from typing import List, Dict, Union
+from typing import List, Dict, Optional, Union
 
 from requests import get
 from lxml import etree, html
@@ -100,9 +100,9 @@ class PerryRhodanPage:
         return cls.pages[start - 1:end]
 
     def __init__(self, novel_number: int):
-        self.author = None
-        self.publish_date = None
-        self.cycle = None
+        self.author: Optional[str] = None
+        self.publish_date: Optional[date] = None
+        self.cycle: Optional[str] = None
         self.number = novel_number
         html_page = get(url_for_novel(novel_number))
         content = html.fromstring(html_page.text.encode('utf-8')).find('body/div[@id="content"]')
@@ -111,13 +111,18 @@ class PerryRhodanPage:
         body_content = content.find('div[@id="bodyContent"]')
         self._extract_overview_data(body_content)
         self.synopsis = self._read_synopsis(body_content) or self._read_synopsis_from_epub(self.number)
+        self.publisher = 'Pabel-Moewig Verlag KG, Rastatt'
+
+    @property
+    def full_title(self) -> str:
+        return f'Perry Rhodan {self.number}: {self.title} (Heftroman): Perry Rhodan-Zyklus "{self.cycle}"'
 
     def goodreads_data(self) -> str:
-        return '''Title: Perry Rhodan {0.number}: {0.title} (Heftroman): Perry Rhodan-Zyklus "{0.cycle}"
+        return '''Title: {0.full_title}
 Author: {0.author}
 Published: {0.publish_date}\n'''.format(self) + \
             ('Synopsis: {}\n'.format(self.synopsis) if self.synopsis else '') + \
-            'Publisher: {}'.format('Pabel-Moewig Verlag KG, Rastatt')
+            'Publisher: {}'.format(self.publisher)
 
     def _extract_overview_data(self, body_content: etree.Element) -> None:
         for row in self._overview_table_rows(body_content):
