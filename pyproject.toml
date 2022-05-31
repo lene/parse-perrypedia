@@ -8,8 +8,9 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = "^3.8"
 requests = "^2.26.0"
-lxml = "^4.6.3"
+lxml = "^4.6.5"
 EbookLib = "^0.17.1"
+selenium = "^3.141.0"
 
 [tool.poetry.dev-dependencies]
 
