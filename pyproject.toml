@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "parse-perrypedia"
-version = "0.1.0"
+version = "0.1.1"
 description = "Parse descriptions of Perry Rhodan episodes from perrypedia.de and print them in a format that makes it easy to transfer them to goodreads.com descriptions"
 authors = ["Lene Preuss <lene.preuss@gmail.com>"]
 license = "MIT"
@@ -8,9 +8,9 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = "^3.8"
 requests = "^2.26.0"
-lxml = "^4.6.5"
+lxml = ">4.6.5"
 EbookLib = "^0.17.1"
-selenium = "^3.141.0"
+selenium = ">3.141.0"
 
 [tool.poetry.dev-dependencies]
 
